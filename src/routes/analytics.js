@@ -432,4 +432,141 @@ router.get('/scans/export', auth, async (req, res) => {
   }
 });
 
+// GET /analytics/scans/by-period
+router.get('/scans/by-period', auth, async (req, res) => {
+  try {
+    const { period = 'past7', limit = 50, page = 1 } = req.query;
+    
+    const days = period === 'past7' ? 7 : 30;
+    const { start, end } = getDateRange(days);
+    
+    const filter = {
+      timestamp: { 
+        $gte: start.toDate(),
+        $lte: end.toDate()
+      }
+    };
+    
+    const totalCount = await Scan.countDocuments(filter);
+    const scans = await Scan.find(filter)
+      .sort({ timestamp: -1 })
+      .skip((Math.max(1, parseInt(page, 10)) - 1) * parseInt(limit, 10))
+      .limit(parseInt(limit, 10))
+      .lean();
+    
+    const formattedScans = scans.map(scan => ({
+      _id: scan._id,
+      qrId: scan.qrId,
+      timestamp: scan.timestamp,
+      date: scan.timestamp.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      }),
+      time: scan.timestamp.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: false
+      }),
+      deviceInfo: scan.deviceInfo,
+      city: scan.deviceInfo?.geo?.city || 'Unknown',
+      region: scan.deviceInfo?.geo?.region || '',
+      country: scan.deviceInfo?.geo?.country || '',
+      creativeId: scan.creativeId || 'N/A',
+      campaign: scan.campaign || 'N/A',
+      publisher: scan.publisher || 'Direct',
+      program: scan.program || 'N/A',
+      conversion: scan.conversion || false,
+      conversionAction: scan.conversionAction || null,
+      ip: scan.ip,
+      userAgent: scan.userAgent
+    }));
+    
+    res.json({
+      scans: formattedScans,
+      pagination: {
+        total: totalCount,
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        pages: Math.ceil(totalCount / parseInt(limit, 10))
+      },
+      period,
+      dateRange: {
+        start: start.toISOString(),
+        end: end.toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Analytics scans/by-period error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch scans',
+      details: error.message 
+    });
+  }
+});
+
+// GET /analytics/scans/:scanId
+router.get('/scans/:scanId', auth, async (req, res) => {
+  try {
+    const scan = await Scan.findById(req.params.scanId).lean();
+    
+    if (!scan) {
+      return res.status(404).json({ error: 'Scan not found' });
+    }
+    
+    const formattedScan = {
+      _id: scan._id,
+      qrId: scan.qrId,
+      timestamp: scan.timestamp,
+      date: scan.timestamp.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      }),
+      time: scan.timestamp.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: false
+      }),
+      deviceInfo: {
+        deviceType: scan.deviceInfo?.deviceType || 'unknown',
+        os: scan.deviceInfo?.os || 'unknown',
+        osVersion: scan.deviceInfo?.osVersion || '',
+        browser: scan.deviceInfo?.browser || 'unknown',
+        browserVersion: scan.deviceInfo?.browserVersion || '',
+        device: scan.deviceInfo?.device || 'unknown',
+        isMobile: scan.deviceInfo?.isMobile || false,
+        isTablet: scan.deviceInfo?.isTablet || false,
+        isDesktop: scan.deviceInfo?.isDesktop || true
+      },
+      geo: {
+        city: scan.deviceInfo?.geo?.city || 'Unknown',
+        region: scan.deviceInfo?.geo?.region || '',
+        country: scan.deviceInfo?.geo?.country || '',
+        timezone: scan.deviceInfo?.geo?.timezone || 'UTC'
+      },
+      creativeId: scan.creativeId || 'N/A',
+      campaign: scan.campaign || 'N/A',
+      publisher: scan.publisher || 'Direct',
+      program: scan.program || 'N/A',
+      conversion: scan.conversion || false,
+      conversionAction: scan.conversionAction || null,
+      ip: scan.ip,
+      userAgent: scan.userAgent,
+      referrer: scan.referrer || null,
+      meta: scan.meta || {}
+    };
+    
+    res.json(formattedScan);
+  } catch (error) {
+    console.error('Analytics scans/:scanId error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch scan details',
+      details: error.message 
+    });
+  }
+});
+
 module.exports = router;

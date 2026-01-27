@@ -143,7 +143,7 @@ router.post('/login', async (req, res) => {
 // Get current user info
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-passwordHash -passwordResetToken');
+    const user = await User.findById(req.user.id).select('-passwordHash -passwordResetToken');
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
