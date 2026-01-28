@@ -20,27 +20,36 @@ async function getGeolocation(ip) {
   return new Promise((resolve) => {
     // Skip for localhost IPs
     if (ip === '::1' || ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+      console.log('[Geolocation] Skipping localhost IP:', ip);
       resolve({});
       return;
     }
 
-    https.get(`https://ip-api.com/json/${ip}?fields=country,region,city,timezone,lat,lon`, (res) => {
+    console.log('[Geolocation] Fetching geolocation for IP:', ip);
+
+    const request = https.get(`https://ip-api.com/json/${ip}?fields=country,region,city,timezone,lat,lon`, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
           const result = JSON.parse(data);
+          console.log('[Geolocation] ip-api.com response:', result);
+          
           if (result.status === 'success') {
-            resolve({
+            const geoData = {
               country: result.country,
               region: result.region,
               city: result.city,
               timezone: result.timezone,
               ll: [result.lat, result.lon]
-            });
+            };
+            console.log('[Geolocation] Successfully resolved:', geoData);
+            resolve(geoData);
           } else {
+            console.log('[Geolocation] ip-api.com returned error status:', result.status);
             // Fallback to geoip-lite
             const fallback = geoip.lookup(ip) || {};
+            console.log('[Geolocation] Falling back to geoip-lite:', fallback);
             resolve({
               country: fallback.country,
               region: fallback.region,
@@ -50,8 +59,10 @@ async function getGeolocation(ip) {
             });
           }
         } catch (e) {
+          console.error('[Geolocation] Error parsing ip-api.com response:', e.message);
           // Fallback to geoip-lite on error
           const fallback = geoip.lookup(ip) || {};
+          console.log('[Geolocation] Falling back to geoip-lite:', fallback);
           resolve({
             country: fallback.country,
             region: fallback.region,
@@ -61,9 +72,27 @@ async function getGeolocation(ip) {
           });
         }
       });
-    }).on('error', () => {
+    }).on('error', (err) => {
+      console.error('[Geolocation] Network error calling ip-api.com:', err.message);
       // Fallback to geoip-lite on network error
       const fallback = geoip.lookup(ip) || {};
+      console.log('[Geolocation] Falling back to geoip-lite:', fallback);
+      resolve({
+        country: fallback.country,
+        region: fallback.region,
+        city: fallback.city,
+        timezone: fallback.timezone,
+        ll: fallback.ll
+      });
+    });
+
+    // Set timeout to 5 seconds
+    request.setTimeout(5000, () => {
+      console.error('[Geolocation] Request timeout for IP:', ip);
+      request.destroy();
+      // Fallback to geoip-lite on timeout
+      const fallback = geoip.lookup(ip) || {};
+      console.log('[Geolocation] Falling back to geoip-lite after timeout:', fallback);
       resolve({
         country: fallback.country,
         region: fallback.region,

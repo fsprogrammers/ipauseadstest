@@ -458,17 +458,6 @@ router.get('/scans/by-period', auth, async (req, res) => {
       _id: scan._id,
       qrId: scan.qrId,
       timestamp: scan.timestamp,
-      date: scan.timestamp.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
-      }),
-      time: scan.timestamp.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit',
-        hour12: false
-      }),
       deviceInfo: scan.deviceInfo,
       city: scan.deviceInfo?.geo?.city || 'Unknown',
       region: scan.deviceInfo?.geo?.region || '',
