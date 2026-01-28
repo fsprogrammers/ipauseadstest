@@ -266,18 +266,26 @@ router.get('/:qrId', async (req, res) => {
     }
 
     // Get client IP address - check multiple headers for proxy scenarios
-    let ip = (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '')
-      .split(',')[0]
-      .trim();
+    let ip = '';
+    
+    // Try X-Forwarded-For first (most common with reverse proxies)
+    if (req.headers['x-forwarded-for']) {
+      ip = req.headers['x-forwarded-for'].split(',')[0].trim();
+    }
     
     // Fallback to other common proxy headers
-    if (!ip || ip === '::1' || ip === '127.0.0.1') {
+    if (!ip || ip === '::1' || ip === '127.0.0.1' || ip.startsWith('::ffff:127')) {
       ip = req.headers['cf-connecting-ip'] || 
            req.headers['x-real-ip'] || 
            req.headers['x-client-ip'] ||
-           req.connection.remoteAddress || 
            req.socket.remoteAddress ||
+           req.connection.remoteAddress ||
            '';
+    }
+    
+    // Remove IPv6 prefix if present (::ffff:192.168.1.1 -> 192.168.1.1)
+    if (ip.startsWith('::ffff:')) {
+      ip = ip.substring(7);
     }
 
     const userAgent = req.get('user-agent') || '';
@@ -287,6 +295,12 @@ router.get('/:qrId', async (req, res) => {
     const geo = await getGeolocation(ip);
 
     console.log('[QR Route] Scan captured:');
+    console.log('[QR Route] Raw headers:', {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'cf-connecting-ip': req.headers['cf-connecting-ip'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'x-client-ip': req.headers['x-client-ip']
+    });
     console.log('[QR Route] IP:', ip);
     console.log('[QR Route] Geolocation lookup result:', geo);
     console.log('[QR Route] City:', geo.city || 'Not available');
@@ -396,18 +410,26 @@ router.get('/track/:qrId', async (req, res) => {
     } = req.query;
 
     // Get client IP address - check multiple headers for proxy scenarios
-    let ip = (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '')
-      .split(',')[0]
-      .trim();
+    let ip = '';
+    
+    // Try X-Forwarded-For first (most common with reverse proxies)
+    if (req.headers['x-forwarded-for']) {
+      ip = req.headers['x-forwarded-for'].split(',')[0].trim();
+    }
     
     // Fallback to other common proxy headers
-    if (!ip || ip === '::1' || ip === '127.0.0.1') {
+    if (!ip || ip === '::1' || ip === '127.0.0.1' || ip.startsWith('::ffff:127')) {
       ip = req.headers['cf-connecting-ip'] || 
            req.headers['x-real-ip'] || 
            req.headers['x-client-ip'] ||
-           req.connection.remoteAddress || 
            req.socket.remoteAddress ||
+           req.connection.remoteAddress ||
            '';
+    }
+    
+    // Remove IPv6 prefix if present (::ffff:192.168.1.1 -> 192.168.1.1)
+    if (ip.startsWith('::ffff:')) {
+      ip = ip.substring(7);
     }
     
     // Get user agent and parse device info
@@ -421,6 +443,12 @@ router.get('/track/:qrId', async (req, res) => {
     const geo = await getGeolocation(ip);
     
     console.log('[QR Track Route] Scan captured:');
+    console.log('[QR Track Route] Raw headers:', {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'cf-connecting-ip': req.headers['cf-connecting-ip'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'x-client-ip': req.headers['x-client-ip']
+    });
     console.log('[QR Track Route] IP:', ip);
     console.log('[QR Track Route] Geolocation lookup result:', geo);
     console.log('[QR Track Route] City:', geo.city || 'Not available');
