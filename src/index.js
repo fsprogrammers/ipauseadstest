@@ -28,8 +28,9 @@ const app = express();
 // Middleware
 // =====================
 
-// Trust proxy (required for express-rate-limit behind reverse proxies)
-app.set('trust proxy', 1);
+// Trust proxy - set to true to trust all proxies, or a number for specific count
+// Since we're behind Nginx, we need to trust the X-Forwarded-For header
+app.set('trust proxy', true);
 
 // Security headers
 app.use(helmet());
