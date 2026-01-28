@@ -8,9 +8,72 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const geoip = require('geoip-lite');
 const UAParser = require('ua-parser-js');
+const https = require('https');
 
 // Cache for storing device info
 const deviceCache = new Map();
+
+/**
+ * Fetch geolocation data from ip-api.com (better city-level data than geoip-lite)
+ */
+async function getGeolocation(ip) {
+  return new Promise((resolve) => {
+    // Skip for localhost IPs
+    if (ip === '::1' || ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+      resolve({});
+      return;
+    }
+
+    https.get(`https://ip-api.com/json/${ip}?fields=country,region,city,timezone,lat,lon`, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          if (result.status === 'success') {
+            resolve({
+              country: result.country,
+              region: result.region,
+              city: result.city,
+              timezone: result.timezone,
+              ll: [result.lat, result.lon]
+            });
+          } else {
+            // Fallback to geoip-lite
+            const fallback = geoip.lookup(ip) || {};
+            resolve({
+              country: fallback.country,
+              region: fallback.region,
+              city: fallback.city,
+              timezone: fallback.timezone,
+              ll: fallback.ll
+            });
+          }
+        } catch (e) {
+          // Fallback to geoip-lite on error
+          const fallback = geoip.lookup(ip) || {};
+          resolve({
+            country: fallback.country,
+            region: fallback.region,
+            city: fallback.city,
+            timezone: fallback.timezone,
+            ll: fallback.ll
+          });
+        }
+      });
+    }).on('error', () => {
+      // Fallback to geoip-lite on network error
+      const fallback = geoip.lookup(ip) || {};
+      resolve({
+        country: fallback.country,
+        region: fallback.region,
+        city: fallback.city,
+        timezone: fallback.timezone,
+        ll: fallback.ll
+      });
+    });
+  });
+}
 
 /**
  * Enhanced UserAgent → Device parser with caching
@@ -192,18 +255,10 @@ router.get('/:qrId', async (req, res) => {
     const referrer = req.get('referer') || req.get('referrer') || '';
 
     const deviceInfo = parseDevice(userAgent);
-    const geo = geoip.lookup(ip) || {};
+    const geo = await getGeolocation(ip);
 
     console.log('[QR Route] Scan captured:');
     console.log('[QR Route] IP:', ip);
-    console.log('[QR Route] All IP headers:', {
-      'x-forwarded-for': req.headers['x-forwarded-for'],
-      'cf-connecting-ip': req.headers['cf-connecting-ip'],
-      'x-real-ip': req.headers['x-real-ip'],
-      'x-client-ip': req.headers['x-client-ip'],
-      'connection.remoteAddress': req.connection.remoteAddress,
-      'socket.remoteAddress': req.socket.remoteAddress
-    });
     console.log('[QR Route] Geolocation lookup result:', geo);
     console.log('[QR Route] City:', geo.city || 'Not available');
     console.log('[QR Route] Region:', geo.region || 'Not available');
@@ -334,18 +389,10 @@ router.get('/track/:qrId', async (req, res) => {
     const deviceInfo = parseDevice(userAgent);
     
     // Get geo location from IP
-    const geo = geoip.lookup(ip) || {};
+    const geo = await getGeolocation(ip);
     
     console.log('[QR Track Route] Scan captured:');
     console.log('[QR Track Route] IP:', ip);
-    console.log('[QR Track Route] All IP headers:', {
-      'x-forwarded-for': req.headers['x-forwarded-for'],
-      'cf-connecting-ip': req.headers['cf-connecting-ip'],
-      'x-real-ip': req.headers['x-real-ip'],
-      'x-client-ip': req.headers['x-client-ip'],
-      'connection.remoteAddress': req.connection.remoteAddress,
-      'socket.remoteAddress': req.socket.remoteAddress
-    });
     console.log('[QR Track Route] Geolocation lookup result:', geo);
     console.log('[QR Track Route] City:', geo.city || 'Not available');
     console.log('[QR Track Route] Region:', geo.region || 'Not available');
