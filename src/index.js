@@ -89,6 +89,29 @@ app.get('/health', (req, res) => res.json({
   timestamp: new Date().toISOString()
 }));
 
+// Debug endpoint to check IP headers
+app.get('/debug/ip', (req, res) => {
+  res.json({
+    headers: {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'cf-connecting-ip': req.headers['cf-connecting-ip'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'x-client-ip': req.headers['x-client-ip'],
+      'user-agent': req.headers['user-agent']
+    },
+    connection: {
+      remoteAddress: req.connection.remoteAddress,
+      remotePort: req.connection.remotePort
+    },
+    socket: {
+      remoteAddress: req.socket.remoteAddress,
+      remotePort: req.socket.remotePort
+    },
+    ip: req.ip,
+    ips: req.ips
+  });
+});
+
 // 404 handler for API routes
 app.use('/v1/*', (req, res) => {
   res.status(404).json({ 

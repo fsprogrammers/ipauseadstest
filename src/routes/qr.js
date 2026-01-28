@@ -173,16 +173,41 @@ router.get('/:qrId', async (req, res) => {
       return res.redirect(302, 'https://www.iPauseAds.com');
     }
 
-    // Get client IP address
-    const ip = (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '')
+    // Get client IP address - check multiple headers for proxy scenarios
+    let ip = (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '')
       .split(',')[0]
       .trim();
+    
+    // Fallback to other common proxy headers
+    if (!ip || ip === '::1' || ip === '127.0.0.1') {
+      ip = req.headers['cf-connecting-ip'] || 
+           req.headers['x-real-ip'] || 
+           req.headers['x-client-ip'] ||
+           req.connection.remoteAddress || 
+           req.socket.remoteAddress ||
+           '';
+    }
 
     const userAgent = req.get('user-agent') || '';
     const referrer = req.get('referer') || req.get('referrer') || '';
 
     const deviceInfo = parseDevice(userAgent);
     const geo = geoip.lookup(ip) || {};
+
+    console.log('[QR Route] Scan captured:');
+    console.log('[QR Route] IP:', ip);
+    console.log('[QR Route] All IP headers:', {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'cf-connecting-ip': req.headers['cf-connecting-ip'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'x-client-ip': req.headers['x-client-ip'],
+      'connection.remoteAddress': req.connection.remoteAddress,
+      'socket.remoteAddress': req.socket.remoteAddress
+    });
+    console.log('[QR Route] Geolocation lookup result:', geo);
+    console.log('[QR Route] City:', geo.city || 'Not available');
+    console.log('[QR Route] Region:', geo.region || 'Not available');
+    console.log('[QR Route] Country:', geo.country || 'Not available');
 
     const scanData = {
       qrId,
@@ -192,11 +217,11 @@ router.get('/:qrId', async (req, res) => {
       deviceInfo: {
         ...deviceInfo,
         geo: {
-          country: geo.country,
-          region: geo.region,
-          city: geo.city,
-          ll: geo.ll,
-          timezone: geo.timezone
+          country: geo.country || null,
+          region: geo.region || null,
+          city: geo.city || null,
+          ll: geo.ll || null,
+          timezone: geo.timezone || null
         }
       },
       referrer,
@@ -286,10 +311,20 @@ router.get('/track/:qrId', async (req, res) => {
       redirect = 'https://www.iPauseAds.com'
     } = req.query;
 
-    // Get client IP address
-    const ip = (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '')
+    // Get client IP address - check multiple headers for proxy scenarios
+    let ip = (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '')
       .split(',')[0]
       .trim();
+    
+    // Fallback to other common proxy headers
+    if (!ip || ip === '::1' || ip === '127.0.0.1') {
+      ip = req.headers['cf-connecting-ip'] || 
+           req.headers['x-real-ip'] || 
+           req.headers['x-client-ip'] ||
+           req.connection.remoteAddress || 
+           req.socket.remoteAddress ||
+           '';
+    }
     
     // Get user agent and parse device info
     const userAgent = req.get('user-agent') || '';
@@ -301,6 +336,21 @@ router.get('/track/:qrId', async (req, res) => {
     // Get geo location from IP
     const geo = geoip.lookup(ip) || {};
     
+    console.log('[QR Track Route] Scan captured:');
+    console.log('[QR Track Route] IP:', ip);
+    console.log('[QR Track Route] All IP headers:', {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'cf-connecting-ip': req.headers['cf-connecting-ip'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'x-client-ip': req.headers['x-client-ip'],
+      'connection.remoteAddress': req.connection.remoteAddress,
+      'socket.remoteAddress': req.socket.remoteAddress
+    });
+    console.log('[QR Track Route] Geolocation lookup result:', geo);
+    console.log('[QR Track Route] City:', geo.city || 'Not available');
+    console.log('[QR Track Route] Region:', geo.region || 'Not available');
+    console.log('[QR Track Route] Country:', geo.country || 'Not available');
+    
     // Prepare scan data
     const scanData = {
       qrId,
@@ -310,11 +360,11 @@ router.get('/track/:qrId', async (req, res) => {
       deviceInfo: {
         ...deviceInfo,
         geo: {
-          country: geo.country,
-          region: geo.region,
-          city: geo.city,
-          ll: geo.ll,
-          timezone: geo.timezone
+          country: geo.country || null,
+          region: geo.region || null,
+          city: geo.city || null,
+          ll: geo.ll || null,
+          timezone: geo.timezone || null
         }
       },
       referrer,
@@ -414,9 +464,19 @@ router.post('/scan', async (req, res) => {
 
     const userAgent = req.get('user-agent') || req.body.device || '';
 
-    const ip = (req.headers['x-forwarded-for'] || req.ip || '')
+    let ip = (req.headers['x-forwarded-for'] || req.ip || '')
       .split(',')[0]
       .trim();
+    
+    // Fallback to other common proxy headers
+    if (!ip || ip === '::1' || ip === '127.0.0.1') {
+      ip = req.headers['cf-connecting-ip'] || 
+           req.headers['x-real-ip'] || 
+           req.headers['x-client-ip'] ||
+           req.connection.remoteAddress || 
+           req.socket.remoteAddress ||
+           '';
+    }
 
     const deviceInfo = parseDevice(userAgent);
 
@@ -478,9 +538,19 @@ router.post('/conversion', async (req, res) => {
     if (!qrId)
       return res.status(400).json({ ok: false, error: 'scanId or qrId required' });
 
-    const ip = (req.headers['x-forwarded-for'] || req.ip || '')
+    let ip = (req.headers['x-forwarded-for'] || req.ip || '')
       .split(',')[0]
       .trim();
+    
+    // Fallback to other common proxy headers
+    if (!ip || ip === '::1' || ip === '127.0.0.1') {
+      ip = req.headers['cf-connecting-ip'] || 
+           req.headers['x-real-ip'] || 
+           req.headers['x-client-ip'] ||
+           req.connection.remoteAddress || 
+           req.socket.remoteAddress ||
+           '';
+    }
 
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
 
