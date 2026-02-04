@@ -18,7 +18,8 @@ router.get('/summary', authMiddleware, async (req, res) => {
     startDate.setDate(startDate.getDate() - parseInt(days));
     startDate.setHours(0, 0, 0, 0);
 
-    const scans = await require('../models/Scan').find({
+    const Scan = require('../models/Scan');
+    const scans = await Scan.find({
       createdAt: { $gte: startDate }
     }).lean();
 
@@ -44,12 +45,68 @@ router.get('/summary', authMiddleware, async (req, res) => {
       });
     }
 
-    // Calculate metrics from scans
+    // Calculate A2AR metrics from scans
     const totalScans = scans.length;
     const conversions = scans.filter(s => s.conversion === true).length;
     const a2ar = totalScans > 0 ? (conversions / totalScans) * 100 : 0;
     
     const a2arResult = A2ARMetric.getA2ARTier(a2ar);
+
+    // Calculate ASV from scans with asvSeconds in meta
+    const scansWithAsv = scans.filter(s => s.meta && s.meta.asvSeconds);
+    let avgAsvSeconds = 0;
+    let asvTier = 0;
+    let asvLabel = 'N/A';
+
+    if (scansWithAsv.length > 0) {
+      const totalAsvSeconds = scansWithAsv.reduce((sum, s) => sum + (s.meta.asvSeconds || 0), 0);
+      avgAsvSeconds = totalAsvSeconds / scansWithAsv.length;
+      
+      // Calculate ASV tier based on seconds
+      if (avgAsvSeconds > 40) {
+        asvTier = 1;
+        asvLabel = 'Low';
+      } else if (avgAsvSeconds > 20) {
+        asvTier = 2;
+        asvLabel = 'Fair';
+      } else if (avgAsvSeconds > 10) {
+        asvTier = 3;
+        asvLabel = 'Average';
+      } else if (avgAsvSeconds > 5) {
+        asvTier = 4;
+        asvLabel = 'Strong';
+      } else if (avgAsvSeconds >= 0) {
+        asvTier = 5;
+        asvLabel = 'Exceptional';
+      }
+    }
+
+    // Calculate ACI from A2AR tier and ASV tier
+    let aciScore = 0;
+    let aciLevel = 0;
+    let aciLabel = 'N/A';
+
+    if (a2arResult.tier > 0 && asvTier > 0) {
+      const rawAci = (a2arResult.tier + asvTier) / 2;
+      aciScore = rawAci * 2;
+      
+      if (aciScore >= 9) {
+        aciLevel = 5;
+        aciLabel = 'Exceptional';
+      } else if (aciScore >= 8) {
+        aciLevel = 4;
+        aciLabel = 'Strong';
+      } else if (aciScore >= 6) {
+        aciLevel = 3;
+        aciLabel = 'Average';
+      } else if (aciScore >= 4) {
+        aciLevel = 2;
+        aciLabel = 'Fair';
+      } else if (aciScore >= 2) {
+        aciLevel = 1;
+        aciLabel = 'Low';
+      }
+    }
 
     res.json({
       a2ar: {
@@ -60,14 +117,14 @@ router.get('/summary', authMiddleware, async (req, res) => {
         label: a2arResult.label
       },
       asv: {
-        averageSeconds: 0,
-        tier: 0,
-        label: 'N/A'
+        averageSeconds: parseFloat(avgAsvSeconds.toFixed(2)),
+        tier: asvTier,
+        label: asvLabel
       },
       aci: {
-        score: 0,
-        level: 0,
-        label: 'N/A'
+        score: parseFloat(aciScore.toFixed(2)),
+        level: aciLevel,
+        label: aciLabel
       }
     });
   } catch (error) {
