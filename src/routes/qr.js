@@ -227,8 +227,16 @@ router.get('/:qrId', async (req, res) => {
     let asvSeconds = null;
     if (sessionId) {
       try {
+        console.log(`[QR SCAN] Looking for PauseEvent with sessionId: ${sessionId}`);
         const pauseEvent = await PauseEvent.findOne({ sessionId });
+        
         if (pauseEvent) {
+          console.log(`[QR SCAN] Found PauseEvent:`, {
+            sessionId: pauseEvent.sessionId,
+            pauseTimestamp: pauseEvent.pauseTimestamp,
+            scanTimestamp: scan.timestamp
+          });
+
           // Update pause event with scan reference
           pauseEvent.scanId = scan._id;
           await pauseEvent.save();
@@ -238,13 +246,23 @@ router.get('/:qrId', async (req, res) => {
           const scanTime = new Date(scan.timestamp).getTime();
           asvSeconds = (scanTime - pauseTime) / 1000;
 
+          console.log(`[QR SCAN] ASV Calculation:`, {
+            pauseTime,
+            scanTime,
+            asvSeconds,
+            asvSecondsRounded: parseFloat(asvSeconds.toFixed(2))
+          });
+
           // Update scan with ASV data
           scan.meta = scan.meta || {};
           scan.meta.asvSeconds = asvSeconds;
           await scan.save();
 
+          console.log(`[QR SCAN] Scan updated with ASV:`, scan.meta.asvSeconds);
+
           // Update A2AR metrics with pause opportunity and ASV
           if (pauseEvent.advertiser) {
+            console.log(`[QR SCAN] Updating A2ARMetric with pauseOpportunity and ASV`);
             await A2ARMetric.updateMetrics({
               date: new Date(),
               advertiser: pauseEvent.advertiser,
@@ -254,15 +272,26 @@ router.get('/:qrId', async (req, res) => {
               asvSeconds: asvSeconds
             });
           }
+        } else {
+          console.log(`[QR SCAN] No PauseEvent found for sessionId: ${sessionId}`);
         }
       } catch (linkError) {
-        console.error('Error linking pause event to scan:', linkError);
+        console.error('[QR SCAN] Error linking pause event to scan:', linkError);
       }
+    } else {
+      console.log(`[QR SCAN] No sessionId provided`);
     }
 
     // Update A2AR metrics with the scan (verified QR engagement)
     if (qr.advertiser) {
       try {
+        console.log(`[QR SCAN] Updating A2ARMetric with conversion and ASV:`, {
+          asvSeconds,
+          advertiser: qr.advertiser,
+          publisher: publisher || qr.publisher || 'Direct',
+          programTitle: qr.program || 'Unknown'
+        });
+        
         await A2ARMetric.updateMetrics({
           date: new Date(),
           advertiser: qr.advertiser,
@@ -272,7 +301,7 @@ router.get('/:qrId', async (req, res) => {
           asvSeconds: asvSeconds
         });
       } catch (metricsError) {
-        console.error('Error updating A2AR metrics:', metricsError);
+        console.error('[QR SCAN] Error updating A2AR metrics:', metricsError);
       }
     }
 

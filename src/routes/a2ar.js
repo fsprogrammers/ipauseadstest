@@ -54,6 +54,15 @@ router.get('/summary', authMiddleware, async (req, res) => {
 
     // Calculate ASV from scans with asvSeconds in meta
     const scansWithAsv = scans.filter(s => s.meta && s.meta.asvSeconds);
+    console.log(`[A2AR SUMMARY] Total scans: ${scans.length}, Scans with ASV: ${scansWithAsv.length}`);
+    
+    if (scansWithAsv.length > 0) {
+      console.log(`[A2AR SUMMARY] Scans with ASV data:`, scansWithAsv.map(s => ({
+        qrId: s.qrId,
+        asvSeconds: s.meta.asvSeconds
+      })));
+    }
+
     let avgAsvSeconds = 0;
     let asvTier = 0;
     let asvLabel = 'N/A';
@@ -61,6 +70,13 @@ router.get('/summary', authMiddleware, async (req, res) => {
     if (scansWithAsv.length > 0) {
       const totalAsvSeconds = scansWithAsv.reduce((sum, s) => sum + (s.meta.asvSeconds || 0), 0);
       avgAsvSeconds = totalAsvSeconds / scansWithAsv.length;
+      
+      console.log(`[A2AR SUMMARY] ASV Calculation:`, {
+        totalAsvSeconds,
+        scansCount: scansWithAsv.length,
+        avgAsvSeconds,
+        avgAsvSecondsRounded: parseFloat(avgAsvSeconds.toFixed(2))
+      });
       
       // Calculate ASV tier based on seconds
       if (avgAsvSeconds > 40) {
@@ -79,6 +95,10 @@ router.get('/summary', authMiddleware, async (req, res) => {
         asvTier = 5;
         asvLabel = 'Exceptional';
       }
+      
+      console.log(`[A2AR SUMMARY] ASV Tier:`, { asvTier, asvLabel });
+    } else {
+      console.log(`[A2AR SUMMARY] No scans with ASV data found`);
     }
 
     // Calculate ACI from A2AR tier and ASV tier
