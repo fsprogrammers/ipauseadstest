@@ -221,6 +221,22 @@ router.get('/:qrId', async (req, res) => {
 
     const scan = await new Scan(scanData).save();
 
+    // Update A2AR metrics with the scan (verified QR engagement)
+    if (qr.advertiser) {
+      try {
+        await A2ARMetric.updateMetrics({
+          date: new Date(),
+          advertiser: qr.advertiser,
+          publisher: publisher || qr.publisher || 'Direct',
+          programTitle: qr.program || 'Unknown',
+          pauseOpportunity: true,  // Count as pause opportunity
+          conversion: true          // Count as verified engagement
+        });
+      } catch (metricsError) {
+        console.error('Error updating A2AR metrics:', metricsError);
+      }
+    }
+
     // Link to pause event if sessionId provided
     if (sessionId) {
       try {
@@ -230,14 +246,14 @@ router.get('/:qrId', async (req, res) => {
           pauseEvent.scanId = scan._id;
           await pauseEvent.save();
 
-          // Update A2AR metrics with scan
+          // Update A2AR metrics with pause opportunity if not already done
           if (pauseEvent.advertiser) {
             await A2ARMetric.updateMetrics({
               date: new Date(),
               advertiser: pauseEvent.advertiser,
               publisher: pauseEvent.publisher,
               programTitle: pauseEvent.programTitle,
-              scan: true
+              pauseOpportunity: true
             });
           }
         }
