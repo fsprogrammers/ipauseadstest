@@ -207,6 +207,8 @@ router.get('/:qrId', async (req, res) => {
       creativeId: creative || qr.creativeId || 'N/A',
       thumbnailUrl: qr.thumbnailUrl || null,
       conversionFee: qr.conversionFee || 0,
+      conversion: true,  // Mark QR scan as a conversion/engagement
+      conversionAction: 'Download',
       meta: {
         headers: {
           'user-agent': userAgent,
