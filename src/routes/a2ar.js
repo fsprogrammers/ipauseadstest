@@ -6,15 +6,70 @@ const authMiddleware = require('../middleware/auth');
 
 /**
  * GET /a2ar/summary
- * Get A2AR metrics summary for the authenticated user
+ * Get A2AR metrics summary for the authenticated user (based on scans they made)
  */
 router.get('/summary', authMiddleware, async (req, res) => {
   try {
     const { days = 30 } = req.query;
-    const advertiserId = req.user.id;
+    const userId = req.user.id;
 
-    const summary = await A2ARMetric.getSummary(advertiserId, parseInt(days));
-    res.json(summary);
+    // Get scans for this user (regardless of QR code owner)
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(days));
+    startDate.setHours(0, 0, 0, 0);
+
+    const scans = await require('../models/Scan').find({
+      createdAt: { $gte: startDate }
+    }).lean();
+
+    if (scans.length === 0) {
+      return res.json({
+        a2ar: {
+          pauseOpportunities: 0,
+          qrDownloads: 0,
+          percentage: 0,
+          tier: 1,
+          label: 'Low'
+        },
+        asv: {
+          averageSeconds: 0,
+          tier: 0,
+          label: 'N/A'
+        },
+        aci: {
+          score: 0,
+          level: 0,
+          label: 'N/A'
+        }
+      });
+    }
+
+    // Calculate metrics from scans
+    const totalScans = scans.length;
+    const conversions = scans.filter(s => s.conversion === true).length;
+    const a2ar = totalScans > 0 ? (conversions / totalScans) * 100 : 0;
+    
+    const a2arResult = A2ARMetric.getA2ARTier(a2ar);
+
+    res.json({
+      a2ar: {
+        pauseOpportunities: totalScans,
+        qrDownloads: conversions,
+        percentage: parseFloat(a2ar.toFixed(2)),
+        tier: a2arResult.tier,
+        label: a2arResult.label
+      },
+      asv: {
+        averageSeconds: 0,
+        tier: 0,
+        label: 'N/A'
+      },
+      aci: {
+        score: 0,
+        level: 0,
+        label: 'N/A'
+      }
+    });
   } catch (error) {
     console.error('Error fetching A2AR summary:', error);
     res.status(500).json({ error: 'Failed to fetch A2AR summary' });
