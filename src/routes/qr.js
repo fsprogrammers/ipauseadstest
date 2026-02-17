@@ -13,6 +13,33 @@ const UAParser = require('ua-parser-js');
 const deviceCache = new Map();
 
 /**
+ * GET /details/:qrId
+ * Fetch QR code details for landing page (no scan logging)
+ */
+router.get('/details/:qrId', async (req, res) => {
+  try {
+    const { qrId } = req.params;
+    const qr = await QrCode.findOne({ id: qrId, active: true }).lean();
+
+    if (!qr) {
+      return res.status(404).json({ error: 'QR code not found' });
+    }
+
+    res.json({
+      id: qr.id,
+      publisher: qr.publisher,
+      program: qr.program,
+      thumbnailUrl: qr.thumbnailUrl,
+      destinationUrl: qr.destinationUrl,
+      creativeId: qr.creativeId
+    });
+  } catch (error) {
+    console.error('Error fetching QR details:', error);
+    res.status(500).json({ error: 'Failed to fetch QR details' });
+  }
+});
+
+/**
  * Enhanced UserAgent → Device parser with caching
  */
 function parseDevice(userAgent) {
