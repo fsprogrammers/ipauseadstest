@@ -591,4 +591,78 @@ router.post('/conversion', async (req, res) => {
   }
 });
 
+/**
+ * POST /qr/track-external
+ * Track QR scans from external destinations (Starbucks, Netflix, Hulu, etc.)
+ * Called by frontend script when user lands on destination with ipause_qr param
+ */
+router.post('/track-external', async (req, res) => {
+  try {
+    const { qrId, sessionId, publisher } = req.body;
+    const ip = (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '').split(',')[0].trim();
+    const userAgent = req.get('user-agent') || '';
+
+    const deviceInfo = parseDevice(userAgent);
+    const geo = geoip.lookup(ip) || {};
+
+    const scan = await Scan.create({
+      qrId,
+      ip,
+      userAgent,
+      device: `${deviceInfo.deviceType}/${deviceInfo.os}`,
+      deviceInfo: {
+        ...deviceInfo,
+        geo: {
+          country: geo.country,
+          region: geo.region,
+          city: geo.city,
+          ll: geo.ll,
+          timezone: geo.timezone
+        }
+      },
+      conversion: true,
+      publisher,
+      meta: { sessionId, source: 'external_redirect' }
+    });
+
+    // Link to pause event if sessionId provided
+    if (sessionId) {
+      try {
+        const pauseEvent = await PauseEvent.findOne({ sessionId });
+        if (pauseEvent) {
+          pauseEvent.scanId = scan._id;
+          await pauseEvent.save();
+
+          // Calculate ASV
+          const pauseTime = new Date(pauseEvent.pauseTimestamp).getTime();
+          const scanTime = new Date(scan.timestamp).getTime();
+          const asvSeconds = (scanTime - pauseTime) / 1000;
+
+          scan.meta.asvSeconds = asvSeconds;
+          await scan.save();
+
+          // Update A2AR metrics
+          if (pauseEvent.advertiser) {
+            await A2ARMetric.updateMetrics({
+              date: new Date(),
+              advertiser: pauseEvent.advertiser,
+              publisher: pauseEvent.publisher,
+              programTitle: pauseEvent.programTitle,
+              conversion: true,
+              asvSeconds: asvSeconds
+            });
+          }
+        }
+      } catch (linkError) {
+        console.error('[TRACK EXTERNAL] Error linking pause event:', linkError);
+      }
+    }
+
+    res.json({ success: true, scanId: scan._id });
+  } catch (error) {
+    console.error('Track external error:', error);
+    res.status(500).json({ error: 'Failed to track' });
+  }
+});
+
 module.exports = router;
